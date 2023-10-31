@@ -34,18 +34,36 @@ int main( void ){
 	double g[78];
 	double f_ad;
 	double f_cmb;
+	double f_tot;
+	double f_conv;
+	double f_core_tot;
+	double f_core_conv;
+	double base_ml;
+	double base_mac;
+	double v_ml;
+	double v_mac;
+	double R_ml;
+	double R_mac;
+	double lambda;
 	//物理定数
-	double G = 6.6743e-11;     //m^3 kg^-1 s^-2
-	//半径,密度
-	double r_core = 1.0e6;     //m
-	double dens_core = 6.0e3;  //kg m^-3
-	double dens_rock = 3.3e3;  //kg m^-3
-	//その他定数
-	double a = 2.0e-6;         //
-	double a_c = 8.0e2;        //J kg^-1 K^-1
-	double alpha_c = 8.0e-5;   //K^-1
-	double k_c = 5.0;          //
-	double Cp_c = 1.0e3;       //J kg^-1 K^-1 (定圧比熱)
+	double G = 6.6743e-11;        //m^3 kg^-1 s^-2
+	double mu = M_PI*4.0e-7;      //N A^-2
+	//ガニメデ全体の定数
+	double omega = 1.618e-6;	  //自転角速度[s^-1]
+	double B = 7.2e-7;			  //赤道表面での磁場 [T = Wb m^-2 = kg A^-1 s^-2]
+	//核の定数
+	double r_core = 1.0e6;     	  //核の半径[m]
+	double k_core = 5.0;          //核の熱伝導率
+	double Cp_core = 8.0e2;       //核の定圧比熱[J kg^-1 K^-1]
+	double rho_core = 6.0e3;  	  //核の密度[kg m^-3]
+	double alpha_core = 8.0e-5;   //核の熱膨張率[K^-1]
+	double sigma_core = 5.0e5;    //核の電気伝導率
+	double a_core = 8.0e2;        // k/(ρ*Cp)
+	//岩石層の定数
+	double k_rock = 6.6;		  //岩石の熱伝導率（仮）
+	double Cp_rock = 1.0e3;       //岩石の定圧比熱[J kg^-1 K^-1]
+	double rho_rock = 3.3e3;      //岩石の密度[kg m^-3]
+	double a_rock = 2.0e-6;       // k/(ρ*Cp)
 	//単位質量当たりの発熱量[W/kg]
 	double h_k = 29.17e-6;
 	double h_th = 26.38e-6;
@@ -76,7 +94,7 @@ int main( void ){
 		temp[i] = 1100;
 		//重力加速度の計算
 		r[i] = r_core + i * dr;
-		mass[i] = 4/3*M_PI * ( (dens_core-dens_rock)*pow(r_core,3.0) + dens_rock*pow(r[i],3.0) );
+		mass[i] = 4/3*M_PI * ( (rho_core-rho_rock)*pow(r_core,3.0) + rho_rock*pow(r[i],3.0) );
 		g[i] = G * mass[i] / pow(r[i],2.0);
 	}
 	////fclose(file_g);
@@ -92,24 +110,35 @@ int main( void ){
         q_u238 = c_u238 * (h_u238*dt) * exp(-log(2.0)*j/(t_half_u238*100.0));
         q_all = q_k + q_th + q_u235 + q_u238;
 		//境界条件を適用
-		temp[0] = 3 * f_cmb * dt / (Cp_c * dens_core * r_core) + temp[0];				//内側の境界条件(∵ f_cmb(j-1) * S_c * dt = Cp_c * dens_c * V_c * (temp[0](j-1)-temp[0](j)) )
-		temp[77] = 278.6 ;			                                                //外側の境界条件
+		newtemp[0] = 3 * f_cmb * dt / (Cp_rock * rho_core * r_core) + temp[0];				//内側の境界条件(∵ f_cmb(j-1) * S_c * dt = Cp_rock * rho_c * V_c * (temp[0](j-1)-temp[0](j)) )
+		temp[77] = 278.6 ;			                                                	//外側の境界条件
 		//温度の計算
 		for(i=1; i<77; i++)
-			newtemp[i] = dt/dr/dr*a * ((1.0/(i+100)+1.0)*temp[i+1] - 2.0*temp[i] + (1.0-1.0/(i+100))*temp[i-1]) + temp[i] + q_all/Cp_c;
-		// printf("%d,%f+%f=%f\n", j, 3 * f_cmb * dt / (Cp_c * dens_core *r_core), temp[0], newtemp[0]);
-		printf("%d,%f,%f,%f,%f\n", j, temp[0], newtemp[0], f_ad, f_cmb);
+			newtemp[i] = dt/dr/dr*a_rock * ((1.0/(i+100)+1.0)*temp[i+1] - 2.0*temp[i] + (1.0-1.0/(i+100))*temp[i-1]) + temp[i] + q_all/Cp_rock;
+			// newtemp[i] =  temp[i] + dt/(dr*dr) * k_rock/(Cp_rock*rho_rock) * ( (1.0+1.0/(i+100))*temp[i+1] - 2.0*temp[i] + (1.0-1.0/(i+100))*temp[i-1] ) + q_all/Cp_rock;
+		//j+1での断熱温度勾配の計算
+		f_ad = -k_core * alpha_core * newtemp[0] * g[0] / Cp_core;
+		//j+1でのCMBでの熱流量の計算
+		f_cmb = k_core * (newtemp[1]-newtemp[0]) / dr;
+		//j+1でのコア内の半径rでの総熱流量
+		f_core_tot = - rho_core * Cp_core * r_core * (newtemp[0] - temp[0])/dt /3;
+		f_core_conv = f_core_tot - f_ad;
+		//j+1での平均流速を計算
+		base_ml = (r_core * f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core)*1000000;
+		base_mac = (f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core * omega)*1000000;
+		v_ml = 0.3 * pow( (r_core * f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core), 0.33);
+		v_mac = pow( (f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core * omega), 0.5);
+		// 磁気レイノルズ数
+		R_ml = v_ml * r_core * mu * sigma_core;
+		R_mac = v_mac * r_core * mu * sigma_core;
+		// エルザッサー数
+		lambda = sigma_core * pow(B,2) / ( 2 * rho_core * omega );
 		//温度を更新
-		for(i=1; i<77; i++)
+		for(i=0; i<77; i++)
 			temp[i] = newtemp[i];
-		//断熱温度勾配の計算
-		f_ad = k_c * alpha_c * temp[0] * g[0] / Cp_c;
-		//熱流量の計算
-		f_cmb = k_c * (temp[1]-temp[0]) / dr;
 		//時間変化を出力
-
-		// printf("%d,%5f,%f\n", j, temp[0] );
-		fprintf(file_j, "%d,%f,%f,%f\n", j, temp[0], f_ad, f_cmb); 
+		printf("%d,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", j, temp[0], temp[1], f_ad, f_cmb, f_core_tot, f_core_conv, base_ml, base_mac, lambda);
+		fprintf(file_j, "%d,%f,%f,%f,%f,%f,%f\n", j, temp[0], f_ad, f_cmb, R_ml, R_mac, lambda); 
 	}
 	fclose(file_j);
 
