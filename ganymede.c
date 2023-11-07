@@ -57,7 +57,7 @@ int main( void ){
 	double Cp_core = 8.0e2;       //核の定圧比熱[J kg^-1 K^-1]
 	double rho_core = 6.0e3;  	  //核の密度[kg m^-3]
 	double alpha_core = 8.0e-5;   //核の熱膨張率[K^-1]
-	double sigma_core = 5.0e5;    //核の電気伝導率
+	double sigma_core = 5.0e5;    //核の電気伝導率[S/m = kg^-1 m^-3 s^3 A^2]
 	double a_core = 8.0e2;        // k/(ρ*Cp)
 	//岩石層の定数
 	double k_rock = 6.6;		  //岩石の熱伝導率（仮）
@@ -124,10 +124,10 @@ int main( void ){
 		f_core_tot = - rho_core * Cp_core * r_core * (newtemp[0] - temp[0])/dt /3;
 		f_core_conv = f_core_tot - f_ad;
 		//j+1での平均流速を計算
-		base_ml = (r_core * f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core)*1000000;
-		base_mac = (f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core * omega)*1000000;
-		v_ml = 0.3 * pow( (r_core * f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core), 0.33);
-		v_mac = pow( (f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core * omega), 0.5);
+		base_ml = (r_core * f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core);
+		base_mac = (f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core * omega);
+		v_ml = 0.3 * pow( (r_core * f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core), 1.0/3.0);
+		v_mac = pow( (f_core_conv * alpha_core * g[0]) / (rho_core * Cp_core * omega), 1.0/2.0);
 		// 磁気レイノルズ数
 		R_ml = v_ml * r_core * mu * sigma_core;
 		R_mac = v_mac * r_core * mu * sigma_core;
@@ -137,11 +137,10 @@ int main( void ){
 		for(i=0; i<77; i++)
 			temp[i] = newtemp[i];
 		//時間変化を出力
-		printf("%d,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", j, temp[0], temp[1], f_ad, f_cmb, f_core_tot, f_core_conv, base_ml, base_mac, lambda);
+		printf("%d,%f,%f,%f,%f,%f,%f\n", j, temp[0], f_core_tot, f_core_conv, R_ml, R_mac, lambda);
 		fprintf(file_j, "%d,%f,%f,%f,%f,%f,%f\n", j, temp[0], f_ad, f_cmb, R_ml, R_mac, lambda); 
 	}
 	fclose(file_j);
-
 
 
 	//動径分布を出力
